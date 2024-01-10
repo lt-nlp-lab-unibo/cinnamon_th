@@ -1,7 +1,8 @@
 from typing import Optional, Dict
 
 import numpy as np
-import torch
+from copy import deepcopy
+import torch as th
 
 from cinnamon_core.utility import logging_utility
 from cinnamon_generic.components.callback import Callback
@@ -24,6 +25,7 @@ class THEarlyStopping(Callback):
         self.stopped_epoch: int = 0
         self.best_value: Optional[float] = None
         self.best_weights: Optional[int] = None
+        self.has_restored: bool = False
 
         if self.mode == 'min':
             self.monitor_op = np.less
@@ -44,6 +46,7 @@ class THEarlyStopping(Callback):
         self.wait = 0
         self.best_epoch = 0
         self.stopped_epoch = 0
+        self.has_restored = False
         self.best_weights = None
         if self.baseline is not None:
             self.best_value = self.baseline
@@ -62,8 +65,8 @@ class THEarlyStopping(Callback):
     def restore_weights(
             self
     ):
-        with torch.no_grad():
-            self.component.model.parameters = self.best_weights
+        with th.no_grad():
+            self.component.model.load_state_dict(self.best_weights)
 
     def on_epoch_end(
             self,
@@ -77,15 +80,17 @@ class THEarlyStopping(Callback):
             self.best_epoch = logs['epoch']
             self.wait = 0
             if self.restore_best_weights:
-                self.best_weights = self.component.model.parameters()
+                with th.no_grad():
+                    self.best_weights = deepcopy(self.component.model.state_dict())
         else:
             self.wait += 1
             if self.wait >= self.patience:
                 self.stopped_epoch = logs['epoch']
                 self.component.model.stop_training = True
                 if self.restore_best_weights:
-                    logging_utility.logger.info('Restoring model weights from the end of the best epoch.')
+                    logging_utility.logger.info(f'Restoring model weights from the end of the best epoch ({self.best_epoch}).')
                     self.restore_weights()
+                    self.has_restored = True
 
     def on_fit_end(
             self,
@@ -94,7 +99,9 @@ class THEarlyStopping(Callback):
         if self.stopped_epoch > 0:
             logging_utility.logger.info(f'Early stopping best epoch: {self.best_epoch}')
 
-        if self.restore_best_weights and self.best_weights is not None:
+        # Done when maximum epochs is reached and early stopping has not triggered
+        if self.restore_best_weights and not self.has_restored:
+            logging_utility.logger.info(f'Restoring model weights from the end of the best epoch: {self.best_epoch}')
             self.restore_weights()
 
         self.reset()

@@ -41,7 +41,9 @@ class THNetwork(Network):
         return accumulator
 
     def input_additional_info(
-            self
+            self,
+            batch_x: Any,
+            batch_y: Any
     ) -> Dict:
         return {}
 
@@ -271,8 +273,9 @@ class THNetwork(Network):
                         callbacks.run(hookpoint='on_batch_fit_begin',
                                       logs={'batch': batch_idx})
 
-                    input_additional_info = self.input_additional_info()
                     batch_x, batch_y = next(data_iterator)
+                    input_additional_info = self.input_additional_info(batch_x=batch_x,
+                                                                       batch_y=batch_y)
                     batch_info, _, model_additional_info = self.batch_fit(batch_x=batch_x,
                                                                           batch_y=batch_y,
                                                                           input_additional_info=input_additional_info)
@@ -365,7 +368,8 @@ class THNetwork(Network):
 
             ground_truth = self.accumulate(accumulator=ground_truth, data=batch_y, default_name='ground_truth')
 
-            input_additional_info = self.input_additional_info()
+            input_additional_info = self.input_additional_info(batch_x=batch_x,
+                                                               batch_y=batch_y)
             batch_loss, \
                 true_batch_loss, \
                 batch_loss_info, \
@@ -448,8 +452,8 @@ class THNetwork(Network):
                               logs={'batch': batch_idx,
                                     'suffixes': suffixes})
 
-            input_additional_info = self.input_additional_info()
             batch_x = next(data_iterator)
+            input_additional_info = self.input_additional_info(batch_x=batch_x)
             batch_predictions, model_additional_info = self.batch_predict(batch_x=batch_x,
                                                                           input_additional_info=input_additional_info)
             if model_processor is not None:
